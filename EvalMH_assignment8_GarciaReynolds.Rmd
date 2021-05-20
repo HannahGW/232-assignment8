@@ -1,0 +1,22 @@
+---
+title: "Assignment 8: Evaluating Models"
+author: "Hannah Garcia & Becca Reynolds"
+date: "5/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(lubridate)
+```
+
+
+```{r}
+msage = read.table("../data/sagerm.txt", header=T)
+```
+
