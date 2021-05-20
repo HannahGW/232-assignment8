@@ -1,0 +1,114 @@
+---
+title: "Assignment 8"
+author: "Becca Reynolds, Hannah Garcia, Atefeh Mohseni"
+date: "5/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(lubridate)
+```
+
+```{r}
+#read in sager data and add date YYYYMMDD column 
+sager <- read_csv(here::here("data", "sager.csv")) %>%
+  mutate(date=make_date(year=year, month=month, day=day))
+
+#seems pointless to recreate all of the plots from class
+#go right into applying given functions to measure performance
+
+source("functions/nse.R")
+source("functions/relerr.R")
+source("functions/cper.R")
+nse(m=sager$model, o=sager$obs)
+
+relerr(m=sager$model, o=sager$obs)*100
+
+cper(m=sager$model, o=sager$obs, weight.nse=0.8)
+
+#try using total annual flow by water year
+sager_wy = sager %>% group_by(wy) %>% summarize(model=sum(model), obs=sum(obs))
+
+nse(sager_wy$model, sager_wy$obs)
+cper(m=sager_wy$model, o=sager_wy$obs, weight.nse=0.8)
+
+# We are concerned about flooding during high flows, in this case November is the most important month to consider 
+tmp = sager %>% group_by(month, year) %>% summarize(model=sum(model), obs=sum(obs))
+# now extract august
+sager_nov = subset(tmp, month==11)
+cor(sager_nov$model, sager_nov$obs)
+
+# turn our evaluation metric into a function for correlating annual maximum flow
+source("functions/check_maxannual.R")
+check_maxannual(m=sager$model,o=sager$obs, month=sager$month, day=sager$day, year=sager$year, wy=sager$wy)
+
+
+
+```
+
+
+```{r}
+# multiple results - lets say we've run the model for multiple years, each column is streamflow for a different parameter set
+msage <- read_csv(here::here("data", "sagerm.csv"))
+
+# we know the start date from our earlier output
+msage$date = sager$date
+head(msage)
+msage$month = sager$month
+msage$year = sager$year
+msage$day = sager$day
+msage$wy = sager$wy
+
+# combine by date to make sure that streamflow and observe match
+
+msage$obs = sager$obs
+
+
+# plot all results
+msagel = msage %>% gather(key="run",value="streamflow", -date, -month, -day, -year, -wy, -obs)
+
+# lets plot water year 1970 otherwise its hard to see
+p1=ggplot(subset(msagel, wy == 1970), aes(as.Date(date), streamflow, col=run))+geom_line()+theme(legend.position = "none")
+p1
+# lets add observed streamflow
+p1+geom_line(aes(as.Date(date), obs), size=2, col="black", linetype=2)+labs(y="Streamflow", x="Date")
+
+
+# compute performance measures for all output
+res = msage %>% select(-date, -month, -day, -year, -wy ) %>% map_dbl(~nse(m=.x, o=msage$obs))
+summary(res)
+
+# max has a "perfect score", remove observations to confirm this is why 
+res = msage %>% select(-date, -month, -day, -year, -wy, -obs) %>% map_dbl(~nse(m=.x, o=msage$obs))
+summary(res)
+
+# create unique identifiers, ID's that track each model output 
+simnames = names(msage %>% select(-date, -month, -day,-year,-wy, -obs))
+results = cbind.data.frame(simnames=simnames, nse=res)
+
+# example using our high flow statistics
+res = msage %>% select(-date, -month, -day, -year, -wy, -obs ) %>% map_dbl(~check_maxannual( o=msage$obs, month=msage$month, day=msage$day, year=msage$year, wy=msage$wy, m=.x))
+
+
+# add to our results
+results$maxannual_cor = res
+
+
+# look at range of metrics 
+summary(results)
+
+# graph range of performance measures
+results1 = results %>% gather(key="metric",value="value", -simnames)
+ggplot(results1, aes(metric, value))+geom_boxplot()+facet_wrap(~metric, scales="free")
+
+# are metrics related to each other
+# useful for assessing whether there are tradeoffs
+ggplot(results, aes(maxannual_cor, nse))+geom_point()
+```
+
